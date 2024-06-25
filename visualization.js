@@ -1,43 +1,63 @@
-const svgWidth = 600, svgHeight = 600;
-const margin = { top: 20, right: 30, bottom: 30, left: 40 };
-const width = svgWidth - margin.left - margin.right;
-const height = svgHeight - margin.top - margin.bottom;
+const tooltip = d3.select("body").append("div")
+    .attr("class", "tooltip")
+    .style("opacity", 0);
 
-const svg = d3.select("body").append("svg")
-    .attr("width", svgWidth)
-    .attr("height", svgHeight)
-  .append("g")
-    .attr("transform", `translate(${margin.left},${margin.top})`);
-
-d3.csv("mock_stock_data.csv").then(data => {
-    data.forEach(d => {
-        d.Date = new Date(d.Date);
-        d.Price = +d.Price;
+svg.selectAll("circle")
+    .data(data.filter(d => d.Stock === "Apple"))
+  .enter().append("circle")
+    .attr("cx", d => x(d.Date))
+    .attr("cy", d => y(d.Price))
+    .attr("r", 5)
+    .on("mouseover", function(event, d) {
+        tooltip.transition()
+            .duration(200)
+            .style("opacity", .9);
+        tooltip.html(`Date: ${d.Date}<br>Price: ${d.Price}`)
+            .style("left", (event.pageX + 5) + "px")
+            .style("top", (event.pageY - 28) + "px");
+    })
+    .on("mouseout", function(d) {
+        tooltip.transition()
+            .duration(500)
+            .style("opacity", 0);
     });
 
-    const x = d3.scaleTime()
-        .domain(d3.extent(data, d => d.Date))
-        .range([0, width]);
+// Dropdown for stock selection
+const stockNames = [...new Set(data.map(d => d.Stock))];
+const dropdown = d3.select("body").append("select")
+    .on("change", function() {
+        const selectedStock = this.value;
+        updateChart(selectedStock);
+    });
 
-    const y = d3.scaleLinear()
-        .domain([0, d3.max(data, d => d.Price)])
-        .range([height, 0]);
+dropdown.selectAll("option")
+    .data(stockNames)
+  .enter().append("option")
+    .text(d => d);
 
-    svg.append("g")
-        .attr("transform", `translate(0,${height})`)
-        .call(d3.axisBottom(x));
+function updateChart(stock) {
+    const filteredData = data.filter(d => d.Stock === stock);
 
-    svg.append("g")
-        .call(d3.axisLeft(y));
+    // Update scales and axes
+    x.domain(d3.extent(filteredData, d => d.Date));
+    y.domain([0, d3.max(filteredData, d => d.Price)]);
+    svg.select("g.x.axis").call(d3.axisBottom(x));
+    svg.select("g.y.axis").call(d3.axisLeft(y));
 
-    const line = d3.line()
-        .x(d => x(d.Date))
-        .y(d => y(d.Price));
-
-    svg.append("path")
-        .datum(data.filter(d => d.Stock === "Apple"))
-        .attr("fill", "none")
-        .attr("stroke", "steelblue")
-        .attr("stroke-width", 1.5)
+    // Update line
+    svg.select("path")
+        .datum(filteredData)
         .attr("d", line);
-});
+
+    // Update circles
+    const circles = svg.selectAll("circle")
+        .data(filteredData);
+
+    circles.enter().append("circle")
+        .attr("r", 5)
+      .merge(circles)
+        .attr("cx", d => x(d.Date))
+        .attr("cy", d => y(d.Price));
+
+    circles.exit().remove();
+}
